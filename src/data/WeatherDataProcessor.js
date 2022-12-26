@@ -1,3 +1,4 @@
+const PERIOD_DAYS = 17
 export class WeatherDataProcessor {
     #cityGeocodes
     constructor() {
@@ -7,12 +8,12 @@ export class WeatherDataProcessor {
         { city: "Tel-Aviv", latitude: 32.0853, longitude: 34.7818 },
         { city: "Eilat", latitude: 29.5577, longitude: 34.9519 }]
     }
-    getData(requestObject) {
+    async getData(requestObject) {
         //{city, dateFrom, dateTo, hourFrom, hourTo}
         const url = this.getUrl(requestObject);
-        const promiseResponse = fetch(url);
-        return this.processData(promiseResponse.then(response => response.json()),
-         requestObject);
+        const response = await fetch(url);
+        const rawData = await response.json();
+        return this.processData(rawData, requestObject);
 
     }
     getUrl(requestObject) {
@@ -27,30 +28,40 @@ export class WeatherDataProcessor {
         console.log(url)
         return url;
     }
-    processData(promiseData, requestObject) {
-        return promiseData.then(data => {
-            const times = data.hourly.time;
-            const temperatures = data.hourly.temperature_2m;
-            
-            const timesSelectedDatesHours = times.filter((__,index) =>
-            {
-                const hour = index % 24;
-                return hour >= requestObject.hourFrom && hour<= requestObject.hourTo;
-            } )
-           
-            const temperaturesDatesHours = temperatures.filter((__,index) =>
-            {
-                const hour = index % 24;
-                return hour >= requestObject.hourFrom && index <= requestObject.hourTo;
-            } )
-            const objects = timesSelectedDatesHours.map((dt, index) => {
-                const dateTime = dt.split("T");
-                const res = {date: dateTime[0], hour: dateTime[1], temperature: temperaturesDatesHours[index]}
-                return res
-            } )
+    processData(data, requestObject) {
+        const times = data.hourly.time;
+        const temperatures = data.hourly.temperature_2m;
+        const temperaturesDatesHours = getElementsAtRequiredHours(temperatures,
+            requestObject);
+        const timesSelectedDatesHours = getElementsAtRequiredHours(times,
+            requestObject);
 
-            
-           return {city: requestObject.city, objects}
+        const objects = timesSelectedDatesHours.map((dt, index) => {
+            const dateTime = dt.split("T");
+            const res = { date: dateTime[0], hour: dateTime[1], temperature: temperaturesDatesHours[index] }
+            return res
         })
+        return { city: requestObject.city, objects }
     }
+    getCities() {
+        return this.#cityGeocodes.map(gc => gc.city);
+    }
+    getMinMaxDates() {
+        const minDate = new Date();
+        const maxDate = new Date();
+        maxDate.setDate(minDate.getDate() + PERIOD_DAYS);
+        return {minDate: getISODate(minDate),
+             maxDate: getISODate(maxDate)};
+    }
+}
+function getISODate(date) {
+    return date.toISOString().slice(0, 10);
+}
+
+function getElementsAtRequiredHours(array, requestObject) {
+    const res = array.filter((__, index) => {
+        const hour = index % 24;
+        return hour >= requestObject.hourFrom && hour <= requestObject.hourTo;
+    })
+    return res
 }
